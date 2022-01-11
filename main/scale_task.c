@@ -13,6 +13,8 @@
 #define DOUT_PIN    ( 4 )
 #define PD_SCK_PIN  ( 5 )
 
+static int32_t s_tare = 0;
+
 int32_t readAvg(hx711_t *p_dev, uint8_t samples) {
     int32_t avg = 0;
     bool ready;
@@ -40,7 +42,7 @@ void scale_task(void *args) {
     // Get the queues - config and message
     TaskArgs_t *queues = (TaskArgs_t *) args;
     QueueHandle_t *p_message_queue = queues->p_msg_queue;
-    QueueHandle_t *p_config_q = queues->p_config_queue;
+    //QueueHandle_t *p_config_q = queues->p_config_queue;
     EventGroupHandle_t *p_evt_group = queues->p_reporting_event_group;
     char msg_buf[128];
 
@@ -51,25 +53,27 @@ void scale_task(void *args) {
         .gain = HX711_GAIN_A_128
     };
     esp_err_t res = hx711_init(&dev);
+    // Scale could be set from Cloud
     float scale = 1.0;
     ESP_LOGI(TAG_SCALE, "Init hx711 = %d", res);
-    int period = POLLING_PERIOD_MS; // TODO: Add value to menuconfig
+    //int period = POLLING_PERIOD_MS; // TODO: Add value to menuconfig
     //if (ESP_OK == res) {
         ESP_LOGI(TAG_SCALE, "Running the task loop");
-        int32_t tare = readAvg(&dev, 5);
-        int new_period;
+        // Tare must be performed based on a signal
+        // s_tare = readAvg(&dev, 5);
+        //int new_period;
         for (;;) {
-            if (pdPASS == xQueueReceive(*p_config_q, &new_period, 0)) {
-                ESP_LOGD(TAG_SCALE, "New period %d", new_period);
-                period = new_period;
-            };
+            // if (pdPASS == xQueueReceive(*p_config_q, &new_period, 0)) {
+            //     ESP_LOGD(TAG_SCALE, "New period %d", new_period);
+            //     period = new_period;
+            // };
             int32_t avg = readAvg(&dev, 5);
-            ESP_LOGI(TAG_SCALE, "Weight: %d", avg-tare);
-            sprintf(msg_buf, "{ \"w\":%.2f }", (avg-tare)*scale);
+            ESP_LOGI(TAG_SCALE, "Weight: %d", avg-s_tare);
+            sprintf(msg_buf, "{ \"w\":%.2f }", (avg-s_tare)*scale);
             char *pBuf = msg_buf;
             xQueueSend(*p_message_queue, &pBuf, 0);
             xEventGroupSetBits(*p_evt_group, REPORTING_SCALE_BIT);
-            vTaskDelay(period / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(get_sleep_period()));
         }
     //}
     ESP_LOGE(TAG_SCALE, "Somethng went wrong - quitting task");

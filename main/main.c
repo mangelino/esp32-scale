@@ -21,6 +21,7 @@
 #include "wifi_task.h"
 #include "mqtt_task.h"
 #include "common.h"
+#include "nvs_flash.h"
 #include "core_json.h"
 #include "led_task.h"
 #include "driver/ledc.h"
@@ -72,7 +73,8 @@ static void mqtt_message_handler(char *topic, char *data)
           ESP_LOGI(TAG, "Found: %s -> %s\n", query, value );
           s_period = atoi(value);
           // Restore the original character.
-          xQueueSend(config_queue, &s_period, 0);
+          // Queues do not work as expected as only one task will get this
+          // xQueueSend(config_queue, &s_period, 0);
           // Report the new period to the shadow
           char reported[128];
           char shadow_topic[64];
@@ -81,6 +83,10 @@ static void mqtt_message_handler(char *topic, char *data)
           mqtt_publish(shadow_topic, reported, 1);
           value[ valueLength ] = save;
       }
+}
+
+int get_sleep_period() {
+    return s_period;
 }
 
 
@@ -157,7 +163,7 @@ void app_main(void)
     EventBits_t bits;
     while(1) {
         bits = xEventGroupWaitBits(s_reporting_event_group, 
-          REPORTING_BME280_BIT | REPORTING_SCALE_BIT, pdFALSE, pdTRUE, 1000/portTICK_RATE_MS);
+          REPORTING_BME280_BIT | REPORTING_SCALE_BIT, pdFALSE, pdTRUE, pdMS_TO_TICKS(1000));
         char buf[128];
 
         if (bits & REPORTING_SCALE_BIT && bits & REPORTING_BME280_BIT && xQueuePeek(message_queue, &buf, 100) == pdFALSE) {
@@ -168,7 +174,7 @@ void app_main(void)
         }
         ESP_LOGI(TAG, "Got bits %d", bits);
         printf("cnt: %d\n", cnt++);
-        vTaskDelay(1000 / portTICK_RATE_MS);
+        vTaskDelay(pdMS_TO_TICKS(1000));
        
 
         //gpio_set_level(GPIO_OUTPUT_IO_0, cnt % 2);
@@ -179,6 +185,8 @@ void app_main(void)
     vEventGroupDelete(s_wifi_event_group);
     vQueueDelete(message_queue);
     vQueueDelete(config_queue);
-    esp_deep_sleep(s_period*1000);
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);
+    esp_sleep_enable_timer_wakeup(s_period * 1000);
+    esp_deep_sleep_start();
 }
 

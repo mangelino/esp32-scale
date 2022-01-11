@@ -151,7 +151,7 @@ void task_bme280_normal_mode(void *args)
 {
 	TaskArgs_t *queues = (TaskArgs_t *) args;
     QueueHandle_t *q = queues->p_msg_queue;
-    QueueHandle_t *p_config_q = queues->p_config_queue;
+    //QueueHandle_t *p_config_q = queues->p_config_queue;
     EventGroupHandle_t *p_evt_group = queues->p_reporting_event_group;
 	uint32_t com_rslt;
     struct bme280_dev dev;
@@ -200,17 +200,15 @@ void task_bme280_normal_mode(void *args)
 	com_rslt += bme280_set_sensor_mode(BME280_NORMAL_MODE, &dev);
 
     struct bme280_data data;
-    int period = POLLING_PERIOD_MS;
+    //int period = POLLING_PERIOD_MS;
 	if (com_rslt == 0) {
 		while(true) {
-            int new_period;
-            if (pdPASS == xQueueReceive(*p_config_q, &new_period, 0)) {
-                ESP_LOGD(TAG_BME, "New period %d", new_period);
-                period = new_period;
-            };
-            // Make this parameter configurable
-			vTaskDelay(period / portTICK_PERIOD_MS);
-            
+            // int new_period;
+            // if (pdPASS == xQueueReceive(*p_config_q, &new_period, 0)) {
+            //     ESP_LOGD(TAG_BME, "New period %d", new_period);
+            //     period = new_period;
+            // };
+            // Make this parameter configurable    
 			com_rslt = bme280_get_sensor_data(BME280_ALL, &data, &dev);
 
 			if (com_rslt == 0) {
@@ -229,6 +227,7 @@ void task_bme280_normal_mode(void *args)
 			} else {
 				ESP_LOGE(TAG_BME, "measure error. code: %d", com_rslt);
 			}
+            vTaskDelay(pdMS_TO_TICKS(get_sleep_period()));
 		}
 	} else {
 		ESP_LOGE(TAG_BME, "init or setting error. code: %d", com_rslt);
@@ -259,7 +258,7 @@ int8_t user_i2c_read(uint8_t reg_addr, uint8_t *data, uint32_t len, void *intf_p
     }
     i2c_master_read_byte(cmd, data + len - 1, NACK_VAL);
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, 10 / portTICK_RATE_MS);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, pdMS_TO_TICKS(10));
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         for (int i = 0; i < len; i++) {

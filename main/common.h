@@ -21,4 +21,6 @@ typedef struct MqttArgs_t {
     //QueueHandle_t *p_led_queue;
 } MqttArgs_t;
 
+int get_sleep_period();
+
 #endif
